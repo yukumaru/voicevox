@@ -1,6 +1,11 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron')
 const path = require('path')
-
+ 
+// Web Speech APIをElectronで動かすために必要なフラグ
+app.commandLine.appendSwitch('enable-speech-dispatcher')
+app.commandLine.appendSwitch('allow-http-screen-capture')
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream', 'false')
+ 
 function createWindow() {
   const win = new BrowserWindow({
     width: 480,
@@ -16,7 +21,7 @@ function createWindow() {
     },
     icon: path.join(__dirname, 'icon.png')
   })
-
+ 
   // マイクパーミッションを自動許可
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     if (permission === 'media') {
@@ -25,29 +30,29 @@ function createWindow() {
       callback(false)
     }
   })
-
+ 
   win.loadFile(path.join(__dirname, 'index.html'))
-
+ 
   // 開発時のみDevTools
   // win.webContents.openDevTools()
 }
-
+ 
 app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
-
+ 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
-
+ 
 // Claude APIへのプロキシ（CORSを回避）
 ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
   const https = require('https')
   const apiKey = process.env.ANTHROPIC_API_KEY || ''
-
+ 
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       model: 'claude-sonnet-4-20250514',
@@ -55,7 +60,7 @@ ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
       system: `あなたは${speaker}として会話します。自然な日本語の話し言葉で、短めに返答してください。`,
       messages
     })
-
+ 
     const options = {
       hostname: 'api.anthropic.com',
       path: '/v1/messages',
@@ -67,7 +72,7 @@ ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
         'Content-Length': Buffer.byteLength(body)
       }
     }
-
+ 
     const req = https.request(options, res => {
       let data = ''
       res.on('data', chunk => data += chunk)
@@ -84,7 +89,7 @@ ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
     req.end()
   })
 })
-
+ 
 // VOICEVOXへのプロキシ
 ipcMain.handle('voicevox-query', async (event, { text, speakerId }) => {
   const http = require('http')
@@ -105,7 +110,7 @@ ipcMain.handle('voicevox-query', async (event, { text, speakerId }) => {
     req.end()
   })
 })
-
+ 
 ipcMain.handle('voicevox-synthesis', async (event, { query, speakerId }) => {
   const http = require('http')
   const body = JSON.stringify(query)
