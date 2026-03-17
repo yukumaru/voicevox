@@ -49,13 +49,15 @@ app.on('window-all-closed', () => {
 })
 
 // Whisper APIへのプロキシ（音声認識）
-ipcMain.handle('whisper-api', async (event, { audioBase64, apiKey }) => {
+ipcMain.handle('whisper-api', async (event, { audioBase64, apiKey, ext: audioExt }) => {
   const https = require('https')
   const FormData = require('form-data')
 
   const audioBuffer = Buffer.from(audioBase64, 'base64')
   const form = new FormData()
-  form.append('file', audioBuffer, { filename: 'audio.webm', contentType: 'audio/webm' })
+  const ext = audioExt || 'webm'
+  const contentType = ext === 'ogg' ? 'audio/ogg' : 'audio/webm'
+  form.append('file', audioBuffer, { filename: `audio.${ext}`, contentType })
   form.append('model', 'whisper-1')
   form.append('language', 'ja')
 

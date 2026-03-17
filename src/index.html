@@ -492,22 +492,30 @@ async function startRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     audioChunks = []
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+
+    // Whisper APIが確実に対応しているmimeTypeを選ぶ
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/ogg'
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType })
     mediaRecorder.ondataavailable = e => {
       if (e.data.size > 0) audioChunks.push(e.data)
     }
     mediaRecorder.onstop = async () => {
       stream.getTracks().forEach(t => t.stop())
       if (!audioChunks.length) return
-      const blob = new Blob(audioChunks, { type: 'audio/webm' })
-      await transcribeAudio(blob)
+      const blob = new Blob(audioChunks, { type: mimeType })
+      await transcribeAudio(blob, mimeType)
     }
-    mediaRecorder.start()
+    mediaRecorder.start(100) // 100msごとにデータを収集
     isListening = true
     btnMic.classList.add('listening')
     setStatus('聞いています... (もう一度押すと送信)', 'listening')
   } catch(e) {
-    setStatus('マイクの許可が必要です', 'error')
+    setStatus('マイクの許可が必要です: ' + e.message, 'error')
   }
 }
 
@@ -520,7 +528,7 @@ function stopRecording() {
   }
 }
 
-async function transcribeAudio(blob) {
+async function transcribeAudio(blob, mimeType) {
   const openaiKey = localStorage.getItem('openai_api_key') || ''
   if (!openaiKey) {
     setStatus('OpenAI APIキーを設定してください', 'error')
@@ -532,9 +540,11 @@ async function transcribeAudio(blob) {
       reader.onload = () => r(reader.result.split(',')[1])
       reader.readAsDataURL(blob)
     })
-    const data = await window.electronAPI.whisperAPI({ audioBase64: base64, apiKey: openaiKey })
-    if (data.text) {
-      sendMessage(data.text)
+    // mimeTypeに応じた拡張子を設定
+    const ext = mimeType.includes('ogg') ? 'ogg' : 'webm'
+    const data = await window.electronAPI.whisperAPI({ audioBase64: base64, apiKey: openaiKey, ext })
+    if (data.text && data.text.trim()) {
+      sendMessage(data.text.trim())
     } else {
       setStatus('音声を認識できませんでした', 'error')
       setTimeout(() => setStatus(''), 2000)
