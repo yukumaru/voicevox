@@ -26,5 +26,8 @@
     "linux": {
       "target": "AppImage"
     }
+  },
+  "dependencies": {
+    "form-data": "^4.0.0"
   }
 }

@@ -48,6 +48,39 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
  
+// Whisper APIへのプロキシ（音声認識）
+ipcMain.handle('whisper-api', async (event, { audioBase64, apiKey }) => {
+  const https = require('https')
+  const FormData = require('form-data')
+ 
+  const audioBuffer = Buffer.from(audioBase64, 'base64')
+  const form = new FormData()
+  form.append('file', audioBuffer, { filename: 'audio.webm', contentType: 'audio/webm' })
+  form.append('model', 'whisper-1')
+  form.append('language', 'ja')
+ 
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.openai.com',
+      path: '/v1/audio/transcriptions',
+      method: 'POST',
+      headers: {
+        ...form.getHeaders(),
+        'Authorization': `Bearer ${apiKey}`
+      }
+    }
+    const req = https.request(options, res => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)) } catch(e) { reject(e) }
+      })
+    })
+    req.on('error', reject)
+    form.pipe(req)
+  })
+})
+ 
 // Claude APIへのプロキシ（CORSを回避）
 ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
   const https = require('https')
