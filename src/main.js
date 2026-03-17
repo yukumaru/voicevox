@@ -48,38 +48,33 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// Whisper APIへのプロキシ（音声認識）
-ipcMain.handle('whisper-api', async (event, { audioBase64, apiKey, ext: audioExt }) => {
-  const https = require('https')
-  const FormData = require('form-data')
+// Windows ネイティブSTT（PowerShell経由）
+ipcMain.handle('windows-stt', async (event, { durationMs }) => {
+  const { execFile } = require('child_process')
+  const duration = Math.ceil((durationMs || 5000) / 1000)
 
-  const audioBuffer = Buffer.from(audioBase64, 'base64')
-  const form = new FormData()
-  const ext = audioExt || 'webm'
-  const contentType = ext === 'ogg' ? 'audio/ogg' : 'audio/webm'
-  form.append('file', audioBuffer, { filename: `audio.${ext}`, contentType })
-  form.append('model', 'whisper-1')
-  form.append('language', 'ja')
+  const psScript = `
+Add-Type -AssemblyName System.Speech
+$recognizer = New-Object System.Speech.Recognition.SpeechRecognitionEngine
+$recognizer.SetInputToDefaultAudioDevice()
+$grammar = New-Object System.Speech.Recognition.DictationGrammar
+$recognizer.LoadGrammar($grammar)
+$result = $recognizer.Recognize([System.TimeSpan]::FromSeconds(${duration}))
+if ($result) { Write-Output $result.Text } else { Write-Output "" }
+$recognizer.Dispose()
+`
 
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.openai.com',
-      path: '/v1/audio/transcriptions',
-      method: 'POST',
-      headers: {
-        ...form.getHeaders(),
-        'Authorization': `Bearer ${apiKey}`
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript], 
+      { timeout: (duration + 5) * 1000 },
+      (err, stdout, stderr) => {
+        if (err) {
+          resolve({ text: '', error: err.message })
+        } else {
+          resolve({ text: stdout.trim() })
+        }
       }
-    }
-    const req = https.request(options, res => {
-      let data = ''
-      res.on('data', chunk => data += chunk)
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)) } catch(e) { reject(e) }
-      })
-    })
-    req.on('error', reject)
-    form.pipe(req)
+    )
   })
 })
 

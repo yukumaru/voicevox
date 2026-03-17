@@ -282,10 +282,8 @@
 </div>
 
 <div class="apikey-bar" id="apikey-bar">
-  <label>Anthropic</label>
+  <label>API Key</label>
   <input type="password" id="apikey-input" placeholder="sk-ant-..." />
-  <label style="margin-left:8px;">OpenAI</label>
-  <input type="password" id="openai-input" placeholder="sk-..." />
   <button id="apikey-save">保存</button>
 </div>
 
@@ -333,7 +331,6 @@ const AVATAR_MAP = {
 let speaker = '春日部つむぎ'
 let history = []
 let apiKey = localStorage.getItem('anthropic_api_key') || ''
-let openaiKey = localStorage.getItem('openai_api_key') || ''
 let isBusy = false
 let isListening = false
 
@@ -348,16 +345,13 @@ const speakerName = document.getElementById('speaker-name')
 const avatar = document.getElementById('avatar')
 const apikeyBar = document.getElementById('apikey-bar')
 const apikeyInput = document.getElementById('apikey-input')
-const openaiInput = document.getElementById('openai-input')
 
 // APIキー設定
-if (apiKey && openaiKey) apikeyBar.classList.add('hidden')
+if (apiKey) apikeyBar.classList.add('hidden')
 document.getElementById('apikey-save').addEventListener('click', () => {
   apiKey = apikeyInput.value.trim()
-  openaiKey = openaiInput.value.trim()
-  if (apiKey) localStorage.setItem('anthropic_api_key', apiKey)
-  if (openaiKey) localStorage.setItem('openai_api_key', openaiKey)
-  if (apiKey && openaiKey) {
+  if (apiKey) {
+    localStorage.setItem('anthropic_api_key', apiKey)
     apikeyBar.classList.add('hidden')
     setStatus('APIキーを保存しました')
     setTimeout(() => setStatus(''), 2000)
@@ -484,84 +478,37 @@ textInput.addEventListener('keydown', e => {
 
 btnSend.addEventListener('click', () => sendMessage(textInput.value))
 
-// 音声認識 (Whisper API)
-let mediaRecorder = null
-let audioChunks = []
+// 音声認識 (Windows ネイティブSTT)
+let startTime = null
 
-async function startRecording() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    audioChunks = []
+btnMic.addEventListener('click', async () => {
+  if (isBusy) return
 
-    // Whisper APIが確実に対応しているmimeTypeを選ぶ
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : MediaRecorder.isTypeSupported('audio/webm')
-      ? 'audio/webm'
-      : 'audio/ogg'
-
-    mediaRecorder = new MediaRecorder(stream, { mimeType })
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) audioChunks.push(e.data)
-    }
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop())
-      if (!audioChunks.length) return
-      const blob = new Blob(audioChunks, { type: mimeType })
-      await transcribeAudio(blob, mimeType)
-    }
-    mediaRecorder.start(100) // 100msごとにデータを収集
-    isListening = true
-    btnMic.classList.add('listening')
-    setStatus('聞いています... (もう一度押すと送信)', 'listening')
-  } catch(e) {
-    setStatus('マイクの許可が必要です: ' + e.message, 'error')
-  }
-}
-
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+  if (isListening) {
+    // 停止 → 録音時間を計算してSTT実行
     isListening = false
     btnMic.classList.remove('listening')
+    const durationMs = Date.now() - startTime
     setStatus('認識中...', 'speaking')
-    mediaRecorder.stop()
-  }
-}
-
-async function transcribeAudio(blob, mimeType) {
-  const openaiKey = localStorage.getItem('openai_api_key') || ''
-  if (!openaiKey) {
-    setStatus('OpenAI APIキーを設定してください', 'error')
-    return
-  }
-  try {
-    const reader = new FileReader()
-    const base64 = await new Promise(r => {
-      reader.onload = () => r(reader.result.split(',')[1])
-      reader.readAsDataURL(blob)
-    })
-    const ext = mimeType.includes('ogg') ? 'ogg' : 'webm'
-    console.log('[Whisper] blob size:', blob.size, 'mimeType:', mimeType, 'ext:', ext)
-    const data = await window.electronAPI.whisperAPI({ audioBase64: base64, apiKey: openaiKey, ext })
-    console.log('[Whisper] response:', JSON.stringify(data))
-    if (data.text && data.text.trim()) {
-      sendMessage(data.text.trim())
-    } else {
-      setStatus('音声を認識できませんでした (size:' + blob.size + ')', 'error')
-      setTimeout(() => setStatus(''), 3000)
+    try {
+      const data = await window.electronAPI.windowsSTT({ durationMs })
+      console.log('[STT] response:', JSON.stringify(data))
+      if (data.text && data.text.trim()) {
+        sendMessage(data.text.trim())
+      } else {
+        setStatus('音声を認識できませんでした', 'error')
+        setTimeout(() => setStatus(''), 2000)
+      }
+    } catch(e) {
+      console.error('[STT] error:', e)
+      setStatus('音声認識エラー: ' + e.message, 'error')
     }
-  } catch(e) {
-    console.error('[Whisper] error:', e)
-    setStatus('Whisper APIエラー: ' + e.message, 'error')
-  }
-}
-
-btnMic.addEventListener('click', () => {
-  if (isBusy) return
-  if (isListening) {
-    stopRecording()
   } else {
-    startRecording()
+    // 開始
+    isListening = true
+    startTime = Date.now()
+    btnMic.classList.add('listening')
+    setStatus('聞いています... (もう一度押すと送信)', 'listening')
   }
 })
 </script>
