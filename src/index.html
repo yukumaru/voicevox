@@ -540,16 +540,18 @@ async function transcribeAudio(blob, mimeType) {
       reader.onload = () => r(reader.result.split(',')[1])
       reader.readAsDataURL(blob)
     })
-    // mimeTypeに応じた拡張子を設定
     const ext = mimeType.includes('ogg') ? 'ogg' : 'webm'
+    console.log('[Whisper] blob size:', blob.size, 'mimeType:', mimeType, 'ext:', ext)
     const data = await window.electronAPI.whisperAPI({ audioBase64: base64, apiKey: openaiKey, ext })
+    console.log('[Whisper] response:', JSON.stringify(data))
     if (data.text && data.text.trim()) {
       sendMessage(data.text.trim())
     } else {
-      setStatus('音声を認識できませんでした', 'error')
-      setTimeout(() => setStatus(''), 2000)
+      setStatus('音声を認識できませんでした (size:' + blob.size + ')', 'error')
+      setTimeout(() => setStatus(''), 3000)
     }
   } catch(e) {
+    console.error('[Whisper] error:', e)
     setStatus('Whisper APIエラー: ' + e.message, 'error')
   }
 }
