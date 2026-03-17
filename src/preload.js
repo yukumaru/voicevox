@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
- 
+
 contextBridge.exposeInMainWorld('electronAPI', {
   claudeAPI: (payload) => ipcRenderer.invoke('claude-api', payload),
   voicevoxQuery: (payload) => ipcRenderer.invoke('voicevox-query', payload),
