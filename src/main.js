@@ -56,6 +56,7 @@ ipcMain.handle('windows-stt', async (event, { maxSeconds }) => {
   const max = maxSeconds || 15
 
   const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Speech
 $recognizer = New-Object System.Speech.Recognition.SpeechRecognitionEngine
 $recognizer.SetInputToDefaultAudioDevice()
@@ -70,16 +71,18 @@ $recognizer.Dispose()
 `
 
   return new Promise((resolve) => {
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript],
-      { timeout: (max + 10) * 1000 },
-      (err, stdout, stderr) => {
-        if (err) {
-          resolve({ text: '', error: err.message })
-        } else {
-          resolve({ text: stdout.trim() })
-        }
-      }
+    const proc = require('child_process').spawn(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', psScript],
+      { timeout: (max + 10) * 1000 }
     )
+    const chunks = []
+    proc.stdout.on('data', chunk => chunks.push(chunk))
+    proc.on('close', () => {
+      const text = Buffer.concat(chunks).toString('utf8').trim()
+      resolve({ text })
+    })
+    proc.on('error', err => resolve({ text: '', error: err.message }))
   })
 })
 
