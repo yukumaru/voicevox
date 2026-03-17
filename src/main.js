@@ -133,7 +133,7 @@ ipcMain.handle('voicevox-query', async (event, { text, speakerId }) => {
   const http = require('http')
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: 50021,
       path: `/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`,
       method: 'POST'
@@ -154,7 +154,7 @@ ipcMain.handle('voicevox-synthesis', async (event, { query, speakerId }) => {
   const body = JSON.stringify(query)
   return new Promise((resolve, reject) => {
     const req = http.request({
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: 50021,
       path: `/synthesis?speaker=${speakerId}`,
       method: 'POST',
