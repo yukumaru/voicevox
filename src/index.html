@@ -478,32 +478,66 @@ textInput.addEventListener('keydown', e => {
 
 btnSend.addEventListener('click', () => sendMessage(textInput.value))
 
-// 音声認識 (Windows ネイティブSTT)
-// ボタンを押す → 話す → 無音で自動終了 → 送信
-btnMic.addEventListener('click', async () => {
-  if (isBusy || isListening) return
+// 音声認識 (Web Speech API)
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+if (SpeechRecognition) {
+  const recognition = new SpeechRecognition()
+  recognition.lang = 'ja-JP'
+  recognition.interimResults = true
+  recognition.continuous = true
 
-  isListening = true
-  btnMic.classList.add('listening')
-  setStatus('話しかけてください... (無音で自動終了)', 'listening')
-
-  try {
-    const data = await window.electronAPI.windowsSTT({ maxSeconds: 15 })
-    console.log('[STT] response:', JSON.stringify(data))
-    if (data.text && data.text.trim()) {
-      sendMessage(data.text.trim())
-    } else {
-      setStatus('音声を認識できませんでした', 'error')
-      setTimeout(() => setStatus(''), 2000)
+  recognition.onstart = () => {
+    isListening = true
+    btnMic.classList.add('listening')
+    setStatus('聞いています... (もう一度押すと停止)', 'listening')
+  }
+  recognition.onresult = e => {
+    let finalTranscript = ''
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalTranscript += e.results[i][0].transcript
+      }
     }
-  } catch(e) {
-    console.error('[STT] error:', e)
-    setStatus('音声認識エラー: ' + e.message, 'error')
-  } finally {
+    if (finalTranscript && !isBusy) {
+      sendMessage(finalTranscript)
+    }
+  }
+  recognition.onend = () => {
+    if (isListening) {
+      setTimeout(() => {
+        try { recognition.start() } catch(e) {}
+      }, 200)
+    }
+  }
+  recognition.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'audio-capture') return
     isListening = false
     btnMic.classList.remove('listening')
+    const msgs = {
+      'not-allowed': 'マイクの許可が必要です',
+      'network': 'ネットワークエラーが発生しました'
+    }
+    setStatus(msgs[e.error] || '音声認識エラー: ' + e.error, 'error')
   }
-})
+
+  btnMic.addEventListener('click', () => {
+    if (isBusy) return
+    if (isListening) {
+      isListening = false
+      btnMic.classList.remove('listening')
+      setStatus('')
+      recognition.stop()
+    } else {
+      isListening = true
+      btnMic.classList.add('listening')
+      setStatus('聞いています... (もう一度押すと停止)', 'listening')
+      try { recognition.start() } catch(e) {}
+    }
+  })
+} else {
+  btnMic.disabled = true
+  setStatus('音声認識非対応のブラウザです', 'error')
+}
 </script>
 </body>
 </html>
