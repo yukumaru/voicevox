@@ -49,24 +49,28 @@ app.on('window-all-closed', () => {
 })
 
 // Windows ネイティブSTT（PowerShell経由）
-ipcMain.handle('windows-stt', async (event, { durationMs }) => {
+// ボタンを押したら話す→無音を検出したら自動終了
+ipcMain.handle('windows-stt', async (event, { maxSeconds }) => {
   const { execFile } = require('child_process')
-  const duration = Math.ceil((durationMs || 5000) / 1000)
+  const max = maxSeconds || 10
 
   const psScript = `
 Add-Type -AssemblyName System.Speech
 $recognizer = New-Object System.Speech.Recognition.SpeechRecognitionEngine
 $recognizer.SetInputToDefaultAudioDevice()
+$recognizer.InitialSilenceTimeout = [System.TimeSpan]::FromSeconds(5)
+$recognizer.BabbleTimeout = [System.TimeSpan]::FromSeconds(3)
+$recognizer.EndSilenceTimeout = [System.TimeSpan]::FromSeconds(1)
 $grammar = New-Object System.Speech.Recognition.DictationGrammar
 $recognizer.LoadGrammar($grammar)
-$result = $recognizer.Recognize([System.TimeSpan]::FromSeconds(${duration}))
-if ($result) { Write-Output $result.Text } else { Write-Output "" }
+$result = $recognizer.Recognize([System.TimeSpan]::FromSeconds(${max}))
+if ($result -and $result.Text) { Write-Output $result.Text } else { Write-Output "" }
 $recognizer.Dispose()
 `
 
   return new Promise((resolve) => {
-    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript], 
-      { timeout: (duration + 5) * 1000 },
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', psScript],
+      { timeout: (max + 10) * 1000 },
       (err, stdout, stderr) => {
         if (err) {
           resolve({ text: '', error: err.message })

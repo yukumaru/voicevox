@@ -479,36 +479,29 @@ textInput.addEventListener('keydown', e => {
 btnSend.addEventListener('click', () => sendMessage(textInput.value))
 
 // 音声認識 (Windows ネイティブSTT)
-let startTime = null
-
+// ボタンを押す → 話す → 無音で自動終了 → 送信
 btnMic.addEventListener('click', async () => {
-  if (isBusy) return
+  if (isBusy || isListening) return
 
-  if (isListening) {
-    // 停止 → 録音時間を計算してSTT実行
+  isListening = true
+  btnMic.classList.add('listening')
+  setStatus('話しかけてください... (無音で自動終了)', 'listening')
+
+  try {
+    const data = await window.electronAPI.windowsSTT({ maxSeconds: 15 })
+    console.log('[STT] response:', JSON.stringify(data))
+    if (data.text && data.text.trim()) {
+      sendMessage(data.text.trim())
+    } else {
+      setStatus('音声を認識できませんでした', 'error')
+      setTimeout(() => setStatus(''), 2000)
+    }
+  } catch(e) {
+    console.error('[STT] error:', e)
+    setStatus('音声認識エラー: ' + e.message, 'error')
+  } finally {
     isListening = false
     btnMic.classList.remove('listening')
-    const durationMs = Date.now() - startTime
-    setStatus('認識中...', 'speaking')
-    try {
-      const data = await window.electronAPI.windowsSTT({ durationMs })
-      console.log('[STT] response:', JSON.stringify(data))
-      if (data.text && data.text.trim()) {
-        sendMessage(data.text.trim())
-      } else {
-        setStatus('音声を認識できませんでした', 'error')
-        setTimeout(() => setStatus(''), 2000)
-      }
-    } catch(e) {
-      console.error('[STT] error:', e)
-      setStatus('音声認識エラー: ' + e.message, 'error')
-    }
-  } else {
-    // 開始
-    isListening = true
-    startTime = Date.now()
-    btnMic.classList.add('listening')
-    setStatus('聞いています... (もう一度押すと送信)', 'listening')
   }
 })
 </script>
