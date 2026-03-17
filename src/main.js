@@ -87,9 +87,8 @@ $recognizer.Dispose()
 })
 
 // Claude APIへのプロキシ（CORSを回避）
-ipcMain.handle('claude-api', async (event, { messages, speaker }) => {
+ipcMain.handle('claude-api', async (event, { messages, speaker, apiKey }) => {
   const https = require('https')
-  const apiKey = process.env.ANTHROPIC_API_KEY || ''
 
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({

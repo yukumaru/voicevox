@@ -445,7 +445,7 @@ async function sendMessage(text) {
   setStatus('考え中...')
 
   try {
-    const data = await window.electronAPI.claudeAPI({ messages: history, speaker })
+    const data = await window.electronAPI.claudeAPI({ messages: history, speaker, apiKey })
     thinking.remove()
 
     const reply = data.content?.[0]?.text || 'うまく答えられませんでした。'
